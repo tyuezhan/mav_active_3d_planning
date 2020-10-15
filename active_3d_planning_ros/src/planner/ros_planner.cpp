@@ -139,6 +139,7 @@ namespace active_3d_planning {
         }
 
         void RosPlanner::requestMovement(const EigenTrajectoryPointVector &trajectory) {
+            ROS_INFO("Enter request Movement, delete this when finish");
             if (trajectory.empty()) {
               LOG(WARNING) << "Tried to publish an empty trajectory";
               return;
@@ -151,6 +152,8 @@ namespace active_3d_planning {
                 msgMultiDofJointTrajectoryPointFromEigen(trajectory[i], &msg->points[i]);
             }
             target_pub_.publish(msg);
+            ROS_INFO("active 3D planning/ros_planner: Publish traj");
+
         }
 
         void RosPlanner::publishVisualization(const VisualizationMarkers &markers) {

@@ -1,0 +1,96 @@
+<launch>
+  <!-- Gazebo arguments -->
+  <arg name="mav_name" default="ddk"/>
+  <arg name="gui" default="true"/>
+  <arg name="verbose_gazebo" default="false"/>
+
+  <!-- Voxblox arguments -->
+  <arg name="voxel_size" default="0.10"/>
+  <arg name="voxels_per_side" default="16"/>
+  <arg name="ray_length" default="5.0"/>
+  <arg name="method" default="merged"/>
+  <arg name="verbose_voxblox" default="false"/>
+
+  <arg name="world_frame" default="/ddk/odom" />
+
+  
+  <!-- Odometry  arguments (random_walk, ground_truth) -->
+  <arg name="odom_noise_model" default="random_walk"/>
+  
+  <!--  Planner arguments-->
+  <arg name="planner_config" default="planners/example_config.yaml"/>
+  
+  <!--  Experiment arguments -->  
+  <arg name="experiment_config" default="Maze.yaml"/>
+  
+  <arg name="delay" default="3.0"/>  
+  
+
+  <!-- *** Run the Simulation *** -->
+  <!-- Load experiment config -->
+  <rosparam command="load" file="$(find active_3d_planning_app_reconstruction)/cfg/experiments/$(arg experiment_config)"/>
+
+
+  <group ns="ddk/planner">
+    <!-- Voxblox -->
+    <node name="voxblox_node" pkg="voxblox_ros" type="esdf_server" output="screen" args="-alsologtostderr">
+      <remap from="pointcloud" to="/ddk/rgbd/depth/points"/>
+      <param name="use_tf_transforms" value="true"/>
+      <param name="publish_tsdf_map" value="true" />
+      <param name="publish_esdf_map" value="true" />
+      <param name="tsdf_voxel_size" value="$(arg voxel_size)" />
+      <param name="tsdf_voxels_per_side" value="$(arg voxels_per_side)" />
+      <param name="color_mode" value="color" />
+      <param name="update_mesh_every_n_sec" value="1.0" />
+      <param name="method" value="$(arg method)" />
+      <param name="max_ray_length" value="$(arg ray_length)" />
+      <param name="allow_clear" value="true" />
+      <param name="verbose" value="$(arg verbose_voxblox)" />
+      <param name="publish_map_incremental" value="true" />
+
+      <param name="world_frame" value="$(arg world_frame)" />
+    </node>
+    
+    <!-- Planner -->
+    <node name="planner_node" pkg="active_3d_planning_app_reconstruction" type="reconstruction_planner_node" output="screen">
+		  <!-- Voxblox Server -->
+      <remap from="planner_node/esdf_map_in" to="voxblox_node/esdf_map_out" />
+      <remap from="planner_node/tsdf_map_in" to="voxblox_node/tsdf_map_out" />
+      <param name="use_tf_transforms" value="false" />
+      <param name="tsdf_voxel_size" value="$(arg voxel_size)" />
+      <param name="tsdf_voxels_per_side" value="$(arg voxels_per_side)" />
+      <param name="update_mesh_every_n_sec" value="0.0" />   
+      <param name="publish_traversable" value="false" />         
+    
+    	<!-- General Settings -->
+      <remap from="odometry" to="/$(arg mav_name)/ground_truth/odom" />
+      <remap from="command/trajectory" to="/$(arg mav_name)/command/trajectory" />
+
+      <!-- Build the Planner by Configuration     -->
+      <rosparam command="load" file="$(find active_3d_planning_app_reconstruction)/cfg/$(arg planner_config)"/>
+    </node>   
+
+
+    <!-- Experiment launcher -->
+    <node name="eval_data_node" pkg="active_3d_planning_app_reconstruction" type="eval_data_node.py" output="screen" required="true">
+      <remap from="ue_out_in" to="unreal_sensor_model/ue_sensor_out" />
+      <remap from="unreal_simulation_ready" to="simulation_manager/simulation_ready" />
+      <remap from="collision" to="unreal_ros_client/collision" />
+      <param name="ns_planner" value="/ddk/planner/planner_node" />
+      <param name="ns_voxblox" value="/ddk/planner/voxblox_node" />
+      <param name="delay" value="$(arg delay)" />
+      <param name="startup_timeout" value="30.0" />
+      <param name="evaluate" value="false" />
+    </node> 
+
+
+    <!-- Our kr tracker interface-->
+    <node name="active_3d_kr_interface" pkg="active_3d_planning_kr_interface" type="kr_tracker_interface" output="screen">
+      <remap from="/ddk/command/trajectory" to="/ddk/command/trajectory"/>
+    </node> 
+  </group>
+
+
+  <!-- RVIZ Visualization -->
+  <node type="rviz" name="rviz_voxblox" pkg="rviz" args="-d $(find active_3d_planning_app_reconstruction)/cfg/experiments/test.rviz"/>
+</launch>
